@@ -273,93 +273,68 @@ abstract class DartRestService<T> {
   // 🚀 GET ALL
   Future<Response> getAll(Request req) => _executeSafely(req, (ctx) async {
         await _runHook(beforeGetAll, ctx);
-        if (!customService) {
+        if (customService == false) {
           final params = req.url.queryParameters;
+
+// Pisahkan pagination param
           final page = int.tryParse(params['page'] ?? '1') ?? 1;
           final limit =
               int.tryParse(params['limit'] ?? '$defaultLimit') ?? defaultLimit;
           final offset = (page - 1) * limit;
 
+// Buang 'limit' dan 'page' dari params sebelum dikirim ke parseQueryParams
           final filterParams = Map<String, String>.from(params)
             ..remove('limit')
             ..remove('page');
 
           final filters = QueryFilter.parseQueryParams(filterParams);
 
-          final allData = await hiveService.findAll(
-            tableName,
-            where: filters,
-            limit: null,
-            offset: null,
-          );
+          // Ambil data langsung dengan filter dan pagination
+          // final data = await hiveService.findAll(
+          //   tableName,
+          //   where: filters,
+          //   limit: enablePagination ? limit : null,
+          //   offset: enablePagination ? offset : null,
+          // );
 
           if (enablePagination) {
+            final allData = await hiveService.findAll(
+              tableName,
+              where: filters,
+              limit: null,
+              offset: null,
+            );
+
+            final paged = allData.skip(offset).take(limit).toList();
+
+            ctx['pagination'] = {
+              'page': page,
+              'limit': limit,
+              'total': allData.length
+            };
+
             ctx.result ??= {
               'page': page,
               'limit': limit,
               'total': allData.length,
-              'data': allData.skip(offset).take(limit).toList(),
+              'data': paged,
             };
           } else {
-            ctx.result ??= allData;
+            final data = await hiveService.findAll(
+              tableName,
+              where: filters,
+              limit: null,
+              offset: null,
+            );
+            ctx.result ??= data;
           }
-        }
-        final params = req.url.queryParameters;
-
-// Pisahkan pagination param
-        final page = int.tryParse(params['page'] ?? '1') ?? 1;
-        final limit =
-            int.tryParse(params['limit'] ?? '$defaultLimit') ?? defaultLimit;
-        final offset = (page - 1) * limit;
-
-// Buang 'limit' dan 'page' dari params sebelum dikirim ke parseQueryParams
-        final filterParams = Map<String, String>.from(params)
-          ..remove('limit')
-          ..remove('page');
-
-        final filters = QueryFilter.parseQueryParams(filterParams);
-
-        // Ambil data langsung dengan filter dan pagination
-        // final data = await hiveService.findAll(
-        //   tableName,
-        //   where: filters,
-        //   limit: enablePagination ? limit : null,
-        //   offset: enablePagination ? offset : null,
-        // );
-
-        if (enablePagination) {
-          final allData = await hiveService.findAll(
-            tableName,
-            where: filters,
-            limit: null,
-            offset: null,
-          );
-
-          final paged = allData.skip(offset).take(limit).toList();
-
-          ctx['pagination'] = {
-            'page': page,
-            'limit': limit,
-            'total': allData.length
-          };
-
-          ctx.result ??= {
-            'page': page,
-            'limit': limit,
-            'total': allData.length,
-            'data': paged,
-          };
-        } else {
-          final data = await hiveService.findAll(
-            tableName,
-            where: filters,
-            limit: null,
-            offset: null,
-          );
-          ctx.result ??= data;
         }
 
         await _runHook(afterGetAll, ctx);
+        if (ctx.result is Response) {
+          return ctx.result as Response;
+        }
+
         return Response.ok(jsonEncode(ctx.result), headers: _jsonHeader);
       });
 
@@ -367,27 +342,16 @@ abstract class DartRestService<T> {
   Future<Response> getOne(Request req, String id) =>
       _executeSafely(req, (ctx) async {
         await _runHook(beforeGetOne, ctx);
-        if (!customService) {
+        if (customService == false) {
           final record =
               await hiveService.findOne(tableName, where: {primaryKey: id});
-
-          if (record == null) {
-            return Response.notFound(
-              jsonEncode({'error': 'Data not found'}),
-              headers: _jsonHeader,
-            );
-          }
-
           ctx.result ??= record;
+          if (record == null) {
+            return Response.notFound(jsonEncode({'error': 'Data not found'}));
+          }
+          ctx['record'] = record;
         }
 
-        final record =
-            await hiveService.findOne(tableName, where: {primaryKey: id});
-        ctx.result ??= record;
-        if (record == null) {
-          return Response.notFound(jsonEncode({'error': 'Data not found'}));
-        }
-        ctx['record'] = record;
         await _runHook(afterGetOne, ctx);
         if (ctx.result is Response) {
           return ctx.result as Response;
@@ -443,6 +407,9 @@ abstract class DartRestService<T> {
         final result = {'message': 'Created', 'data': toJson(item)};
         ctx['response'] = result;
         ctx.result ??= result;
+        if (ctx.result is Response) {
+          return ctx.result as Response;
+        }
 
         return Response.ok(jsonEncode(ctx.result), headers: _jsonHeader);
       });
@@ -453,7 +420,7 @@ abstract class DartRestService<T> {
         final payload = jsonDecode(await req.readAsString());
         ctx.payload.addAll(Map<String, dynamic>.from(payload));
         await _runHook(beforeUpdate, ctx);
-        if (!customService) {
+        if (customService == false) {
           await hiveService.update(
             tableName,
             payload,
@@ -467,6 +434,10 @@ abstract class DartRestService<T> {
         final result = {'message': 'Updated', 'data': toJson(item)};
         ctx['response'] = result;
         ctx.result ??= result;
+        if (ctx.result is Response) {
+          return ctx.result as Response;
+        }
+
         return Response.ok(jsonEncode(ctx.result), headers: _jsonHeader);
       });
 
@@ -474,7 +445,7 @@ abstract class DartRestService<T> {
   Future<Response> delete(Request req, String id) =>
       _executeSafely(req, (ctx) async {
         await _runHook(beforeDelete, ctx);
-        if (!customService) {
+        if (customService == false) {
           await hiveService.destroy(tableName, where: {primaryKey: id});
         }
         await _runHook(afterDelete, ctx);
@@ -482,6 +453,10 @@ abstract class DartRestService<T> {
         final result = {'message': 'Deleted $id'};
         ctx['response'] = result;
         ctx.result ??= result;
+        if (ctx.result is Response) {
+          return ctx.result as Response;
+        }
+
         return Response.ok(jsonEncode(ctx.result), headers: _jsonHeader);
       });
 }
