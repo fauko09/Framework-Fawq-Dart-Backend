@@ -1,4 +1,4 @@
-name: fawq_dart_backend
+name: fawq_dart_backend # replace name u project
 description: A server app using the shelf package and Docker.
 version: 1.0.0
 developer framework: Fauko Missalam 
