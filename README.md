@@ -6,6 +6,7 @@
 dart compile exe -o build/main bin/server.dart
 ./build/main.exe
 
+
 # .env:
 DB_HOST=localhost
 DB_PORT=3360
@@ -140,6 +141,7 @@ Misal ingin membuat service event:
 
 dart run <nama_file_generator_service>.dart event
 
+dart run bin/gen_rest.dart ping --no-db ( custom service no db )
 
 Output:
 
