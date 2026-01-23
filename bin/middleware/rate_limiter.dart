@@ -1,4 +1,5 @@
 import 'dart:collection';
+import 'dart:convert';
 import 'dart:io';
 import 'package:shelf/shelf.dart';
 
@@ -30,7 +31,7 @@ class RateLimiter {
         if (hits.length >= maxRequests) {
           return Response(
             429,
-            body: {'error': 'Too many requests'},
+            body: jsonEncode({'error': 'Too many requests'}),
             headers: {'content-type': 'application/json'},
           );
         }

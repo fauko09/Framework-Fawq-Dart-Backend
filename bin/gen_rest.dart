@@ -8,6 +8,7 @@ void main(List<String> args) {
   }
 
   final name = args[0].toLowerCase();
+  final hasDb = args.length < 2 || args[1] != '--no-db';
   final className = '${_pascalCase(name)}Rest';
   final fileName = '${name}_rest.dart';
   final dir = Directory('bin/$name/');
@@ -23,20 +24,21 @@ void main(List<String> args) {
     exit(1);
   }
 
-  file.writeAsStringSync(_template(className, name));
+  file.writeAsStringSync(_template(className, name , hasDb));
 
   print('✅ Generated: ${file.path}');
 }
 
-String _template(String className, String resource) {
+String _template(String className, String resource , bool hasDb) {
   return '''
 import '../dart_rest/dart_rest_service.dart';
 
 class $className extends DartRestService<Map<String, dynamic>>{
-  $className() : super('$resource') {
+  $className() : super('$resource', customService: ${!hasDb}) {
     enablePagination = true;
-    primaryKey = '${resource}_id';
- 
+
+    ${hasDb ? "primaryKey = '${resource}_id';" : ''}
+
     // get all
     beforeGetAll = (ctx) async {};
     afterGetAll = (ctx) async {};
@@ -58,6 +60,7 @@ class $className extends DartRestService<Map<String, dynamic>>{
     afterDelete = (ctx) async {};
   }
 
+
   @override
   Map<String, dynamic> fromJson(Map<String, dynamic> json) {
     return Map<String, dynamic>.from(json);
@@ -72,8 +75,5 @@ class $className extends DartRestService<Map<String, dynamic>>{
 }
 
 String _pascalCase(String text) {
-  return text
-      .split('_')
-      .map((e) => e[0].toUpperCase() + e.substring(1))
-      .join();
+  return text.split('_').map((e) => e[0].toUpperCase() + e.substring(1)).join();
 }

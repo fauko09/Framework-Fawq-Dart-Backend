@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart';
@@ -6,6 +7,7 @@ import 'dart_rest/migrator/migrator.dart';
 import 'upload_service/upload_service_rest.dart';
 import 'env_loader.dart';
 import 'middleware/middleware.dart';
+import 'ping/ping_rest.dart';
 
 Future<void> main(List<String> args) async {
   // Load environment
@@ -22,8 +24,14 @@ Future<void> main(List<String> args) async {
   final uploadRest = UploadServiceRest();
   router.mount('/upload', uploadRest.router.call);
   // Route default /root
+  final customServiceExample = PingRest();
+  router.mount('/example', customServiceExample.router.call);
+
   router.get('/', (Request req) {
-    return Response.ok({"message": '✅ Backend REST API is running.\n'});
+    return Response.ok(
+      jsonEncode({'message': '✅ Backend REST API is running'}),
+      headers: {'content-type': 'application/json'},
+    );
   });
 
   // Global middleware (logger, dll)

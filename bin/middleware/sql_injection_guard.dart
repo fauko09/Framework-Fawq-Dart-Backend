@@ -19,21 +19,29 @@ class SqlInjectionGuard {
           }
         }
 
-        // 2️⃣ Check body (JSON only)
-        if (request.headers['content-type']?.contains('application/json') ==
-            true) {
-          final body = await request.readAsString();
-          if (_isMalicious(body)) {
-            return _blocked();
-          }
+        final contentType = request.headers['content-type'] ?? '';
 
-          // Re-inject body supaya handler tetap bisa baca
-          request = request.change(
-            body: Stream.value(utf8.encode(body)),
-          );
+        // 2️⃣ HANYA JSON
+        if (!contentType.contains('application/json')) {
+          return innerHandler(request);
         }
 
-        return innerHandler(request);
+        final body = await request.readAsString();
+
+        if (body.isNotEmpty && _isMalicious(body)) {
+          return _blocked();
+        }
+
+        // 3️⃣ Rebuild request DENGAN HEADER UTUH
+        final rebuiltRequest = request.change(
+          body: Stream.value(utf8.encode(body)),
+          headers: {
+            ...request.headers,
+            'content-length': utf8.encode(body).length.toString(),
+          },
+        );
+
+        return innerHandler(rebuiltRequest);
       };
     };
   }
@@ -45,7 +53,7 @@ class SqlInjectionGuard {
   Response _blocked() {
     return Response(
       400,
-      body: {'error': 'Malicious input detected'},
+      body: jsonEncode({'error': 'Malicious input detected'}),
       headers: {'content-type': 'application/json'},
     );
   }

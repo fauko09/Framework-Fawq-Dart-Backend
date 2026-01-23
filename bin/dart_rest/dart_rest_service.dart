@@ -127,6 +127,8 @@ class QueryFilter {
 abstract class DartRestService<T> {
   final String tableName;
   final MySqlInitService hiveService = MySqlInitService();
+  final bool customService;
+
   // final HiveService hiveService = HiveService();
   final Router router = Router();
   String primaryKey = 'id';
@@ -157,7 +159,7 @@ abstract class DartRestService<T> {
 
   Map<String, String> get jsonHeader => _jsonHeader;
 
-  DartRestService(this.tableName) {
+  DartRestService(this.tableName, {this.customService = false}) {
     router.get('/', getAll);
     router.get('/<id>', getOne);
     router.post('/', create);
@@ -271,6 +273,37 @@ abstract class DartRestService<T> {
   // 🚀 GET ALL
   Future<Response> getAll(Request req) => _executeSafely(req, (ctx) async {
         await _runHook(beforeGetAll, ctx);
+        if (!customService) {
+          final params = req.url.queryParameters;
+          final page = int.tryParse(params['page'] ?? '1') ?? 1;
+          final limit =
+              int.tryParse(params['limit'] ?? '$defaultLimit') ?? defaultLimit;
+          final offset = (page - 1) * limit;
+
+          final filterParams = Map<String, String>.from(params)
+            ..remove('limit')
+            ..remove('page');
+
+          final filters = QueryFilter.parseQueryParams(filterParams);
+
+          final allData = await hiveService.findAll(
+            tableName,
+            where: filters,
+            limit: null,
+            offset: null,
+          );
+
+          if (enablePagination) {
+            ctx.result ??= {
+              'page': page,
+              'limit': limit,
+              'total': allData.length,
+              'data': allData.skip(offset).take(limit).toList(),
+            };
+          } else {
+            ctx.result ??= allData;
+          }
+        }
         final params = req.url.queryParameters;
 
 // Pisahkan pagination param
@@ -287,12 +320,12 @@ abstract class DartRestService<T> {
         final filters = QueryFilter.parseQueryParams(filterParams);
 
         // Ambil data langsung dengan filter dan pagination
-        final data = await hiveService.findAll(
-          tableName,
-          where: filters,
-          limit: enablePagination ? limit : null,
-          offset: enablePagination ? offset : null,
-        );
+        // final data = await hiveService.findAll(
+        //   tableName,
+        //   where: filters,
+        //   limit: enablePagination ? limit : null,
+        //   offset: enablePagination ? offset : null,
+        // );
 
         if (enablePagination) {
           final allData = await hiveService.findAll(
@@ -334,6 +367,20 @@ abstract class DartRestService<T> {
   Future<Response> getOne(Request req, String id) =>
       _executeSafely(req, (ctx) async {
         await _runHook(beforeGetOne, ctx);
+        if (!customService) {
+          final record =
+              await hiveService.findOne(tableName, where: {primaryKey: id});
+
+          if (record == null) {
+            return Response.notFound(
+              jsonEncode({'error': 'Data not found'}),
+              headers: _jsonHeader,
+            );
+          }
+
+          ctx.result ??= record;
+        }
+
         final record =
             await hiveService.findOne(tableName, where: {primaryKey: id});
         ctx.result ??= record;
@@ -362,6 +409,24 @@ abstract class DartRestService<T> {
 
         // 🎯 2) Jalankan beforeCreate (upload file isi ctx.payload di sini)
         await _runHook(beforeCreate, ctx);
+        if (customService == true) {
+          // Jalankan afterCreate secara eksplisit
+          if (afterCreate != null) {
+            final data = ctx.payload.isNotEmpty
+                ? fromJson(ctx.payload)
+                : <String, dynamic>{} as T;
+
+            final result = await afterCreate!(data, ctx);
+            ctx.result = result;
+          }
+
+          ctx.result ??= {'message': 'Custom service response'};
+
+          return Response.ok(
+            jsonEncode(ctx.result),
+            headers: _jsonHeader,
+          );
+        }
 
         // 🎯 3) Insert ke Hive
         final ordered = reorderPrimaryKeyFirst(ctx.payload, primaryKey);
@@ -388,8 +453,13 @@ abstract class DartRestService<T> {
         final payload = jsonDecode(await req.readAsString());
         ctx.payload.addAll(Map<String, dynamic>.from(payload));
         await _runHook(beforeUpdate, ctx);
-
-        await hiveService.update(tableName, payload, where: {primaryKey: id});
+        if (!customService) {
+          await hiveService.update(
+            tableName,
+            payload,
+            where: {primaryKey: id},
+          );
+        }
 
         var item = fromJson(payload);
         if (afterUpdate != null) item = await afterUpdate!(item, ctx);
@@ -404,7 +474,9 @@ abstract class DartRestService<T> {
   Future<Response> delete(Request req, String id) =>
       _executeSafely(req, (ctx) async {
         await _runHook(beforeDelete, ctx);
-        await hiveService.destroy(tableName, where: {primaryKey: id});
+        if (!customService) {
+          await hiveService.destroy(tableName, where: {primaryKey: id});
+        }
         await _runHook(afterDelete, ctx);
 
         final result = {'message': 'Deleted $id'};
