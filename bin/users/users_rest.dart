@@ -27,6 +27,7 @@ class UsersRest extends DartRestService<Map<String, dynamic>> {
       if (user == null) {
         throw AuthException('Unauthorized');
       }
+      print('Authorized user: ${jsonEncodeSafe(user)}');
       var permissions =
           await VerifyPremission().verifyPremission(user['user_id']);
       if (permissions.isEmpty) {
@@ -37,6 +38,8 @@ class UsersRest extends DartRestService<Map<String, dynamic>> {
       if (!hasPermission) {
         throw AuthException('Forbidden');
       }
+      print(
+          'Fetching all users with permissions: ${jsonEncodeSafe(permissions)}');
     };
     afterGetAll = (ctx) async {};
 
@@ -211,6 +214,21 @@ class UsersRest extends DartRestService<Map<String, dynamic>> {
 
     // patch/id or put/id
     beforeUpdate = (ctx) async {
+      if (ctx.payload.isEmpty) {
+        ctx.result = {
+          'message': 'No data provided for update',
+        };
+        return;
+      }
+      ctx['data'] = Map<String, dynamic>.from(ctx.payload);
+      ctx.payload.remove('address');
+      ctx.payload.remove('phone');
+      ctx.payload.remove('nik_ktp');
+      ctx.payload.remove('phone2');
+      ctx.payload.remove('no_bank');
+      ctx.payload.remove('department_id');
+      ctx.payload.remove('position_id');
+      ctx.payload.remove('role_id');
       final user = await AuthGuard().authorizedUser(ctx.req);
       if (user == null) {
         throw AuthException('Unauthorized');
@@ -226,6 +244,103 @@ class UsersRest extends DartRestService<Map<String, dynamic>> {
       if (!hasPermission) {
         throw AuthException('Forbidden');
       }
+      var userId = ctx.req.url.pathSegments.isNotEmpty
+          ? ctx.req.url.pathSegments.last
+          : null;
+      await Future.wait(
+        [
+          model.update('users_detail', {
+            'address': ctx['data']['address'],
+            'phone': ctx['data']['phone'],
+            'nik_ktp': ctx['data']['nik_ktp'],
+            'phone2': ctx['data']['phone2'],
+            'no_bank': ctx['data']['no_bank'],
+          }, where: {
+            'user_id': userId,
+          }),
+          model.update('employees', {
+            'full_name': ctx['data']['name'],
+            'department_id': ctx['data']['department_id'],
+            'position_id': ctx['data']['position_id'],
+          }, where: {
+            'user_id': userId,
+          }),
+          model.findOne('user_roles', where: {
+            'user_id': userId,
+          }).then((userRole) async {
+            if (userRole != null && ctx['data']['role_id'] != null) {
+              await model.update('user_roles', {
+                'role_id': ctx['data']['role_id'],
+              }, where: {
+                'user_id': userId,
+              });
+            } else if (ctx['data']['role_id'] != null) {
+              await model.create('user_roles', {
+                'user_role_id': const Uuid().v4(),
+                'user_id': userId,
+                'role_id': ctx['data']['role_id'],
+              });
+            }
+          }),
+        ],
+      );
+
+      // var result = model.leftJoin('users', joins: [
+      //   {
+      //     'table': 'users_detail',
+      //     'sourceTable': 'users',
+      //     'sourceKey': 'user_id',
+      //     'targetKey': 'user_id',
+      //   },
+      //   {
+      //     'table': 'employees',
+      //     'sourceTable': 'users_detail',
+      //     'sourceKey': 'user_id',
+      //     'targetKey': 'user_id',
+      //   },
+      //   {
+      //     'table': 'departments',
+      //     'sourceTable': 'employees',
+      //     'sourceKey': 'department_id',
+      //     'targetKey': 'department_id',
+      //   },
+      //   {
+      //     'table': 'positions',
+      //     'sourceTable': 'employees',
+      //     'sourceKey': 'position_id',
+      //     'targetKey': 'position_id',
+      //   },
+      //   {
+      //     "table": 'user_roles',
+      //     "sourceTable": 'users',
+      //     "sourceKey": 'user_id',
+      //     "targetKey": 'user_id',
+      //   },
+      //   {
+      //     "table": 'roles',
+      //     "sourceTable": 'user_roles',
+      //     "sourceKey": 'role_id',
+      //     "targetKey": 'role_id',
+      //   }
+      // ],
+      //  fields: [
+      //   'users.user_id',
+      //   'users.name',
+      //   'users.is_active',
+      //   'users_detail.address',
+      //   'users_detail.phone AS phone_number',
+      //   'users_detail.nik',
+      //   'users_detail.nik_ktp',
+      //   'users_detail.no_bank',
+      //   'users_detail.nama_bank',
+      //   'employees.contract_type',
+      //   'employees.employee_status',
+      //   'departments.name AS department_name',
+      //   'positions.name AS position_name',
+      //   'roles.name AS role_name',
+      //  ], where: {
+      //   'users.user_id':  userId,
+      // }).then((data) => data.isNotEmpty ? data.first : null);
     };
     afterUpdate = (data, ctx) async {
       return {
