@@ -4,6 +4,39 @@ import 'package:shelf/shelf.dart';
 import 'package:shelf_router/shelf_router.dart';
 import 'mysql/mysql_service.dart';
 
+dynamic toJsonSafe(dynamic value) {
+  if (value == null || value is String || value is num || value is bool) {
+    return value;
+  }
+
+  if (value is DateTime) {
+    return value.toIso8601String();
+  }
+
+  if (value is Response) {
+    return value;
+  }
+
+  if (value is Map) {
+    return value.map(
+      (key, nestedValue) => MapEntry('$key', toJsonSafe(nestedValue)),
+    );
+  }
+
+  if (value is Iterable) {
+    return value.map(toJsonSafe).toList();
+  }
+
+  try {
+    final encoded = (value as dynamic).toJson();
+    return toJsonSafe(encoded);
+  } catch (_) {
+    return value.toString();
+  }
+}
+
+String jsonEncodeSafe(dynamic value) => jsonEncode(toJsonSafe(value));
+
 /// 🔹 Context data class
 class HookContext {
   final Request req;
@@ -229,6 +262,34 @@ abstract class DartRestService<T> {
     if (hook != null) await hook(ctx);
   }
 
+  T _resolveHookData(HookContext ctx, [dynamic fallback]) {
+    final source = ctx.result ?? fallback ?? ctx.payload;
+
+    if (source is T) return source;
+    if (source is Map<String, dynamic>) return fromJson(source);
+    if (source is Map) return fromJson(Map<String, dynamic>.from(source));
+
+    throw StateError(
+      'Hook data for $tableName must be $T or Map<String, dynamic>, got ${source.runtimeType}',
+    );
+  }
+
+  Future<Response> _buildHookResponse(
+      HookContext ctx, Map<String, dynamic> fallback) async {
+    ctx['response'] = fallback;
+    ctx.result ??= fallback;
+
+    return _okJson(ctx.result);
+  }
+
+  Response _okJson(dynamic body) {
+    if (body is Response) {
+      return body;
+    }
+
+    return Response.ok(jsonEncodeSafe(body), headers: _jsonHeader);
+  }
+
   Future<Response> executeSafelyStream(
     Request req,
     Future<Response> Function(HookContext ctx) handler,
@@ -331,11 +392,7 @@ abstract class DartRestService<T> {
         }
 
         await _runHook(afterGetAll, ctx);
-        if (ctx.result is Response) {
-          return ctx.result as Response;
-        }
-
-        return Response.ok(jsonEncode(ctx.result), headers: _jsonHeader);
+        return _okJson(ctx.result);
       });
 
   // 🚀 GET ONE
@@ -353,10 +410,7 @@ abstract class DartRestService<T> {
         }
 
         await _runHook(afterGetOne, ctx);
-        if (ctx.result is Response) {
-          return ctx.result as Response;
-        }
-        return Response.ok(jsonEncode(ctx.result), headers: _jsonHeader);
+        return _okJson(ctx.result);
       });
 
   // 🚀 CREATE
@@ -373,23 +427,24 @@ abstract class DartRestService<T> {
 
         // 🎯 2) Jalankan beforeCreate (upload file isi ctx.payload di sini)
         await _runHook(beforeCreate, ctx);
+        if (ctx.result != null) {
+          if (afterCreate != null) {
+            ctx.result = await afterCreate!(_resolveHookData(ctx), ctx);
+          }
+
+          return _buildHookResponse(ctx, {'message': 'Created'});
+        }
+
         if (customService == true) {
           // Jalankan afterCreate secara eksplisit
           if (afterCreate != null) {
-            final data = ctx.payload.isNotEmpty
-                ? fromJson(ctx.payload)
-                : <String, dynamic>{} as T;
-
-            final result = await afterCreate!(data, ctx);
+            final result = await afterCreate!(_resolveHookData(ctx), ctx);
             ctx.result = result;
           }
 
           ctx.result ??= {'message': 'Custom service response'};
 
-          return Response.ok(
-            jsonEncode(ctx.result),
-            headers: _jsonHeader,
-          );
+          return _okJson(ctx.result);
         }
 
         // 🎯 3) Insert ke Hive
@@ -400,18 +455,14 @@ abstract class DartRestService<T> {
         print('✅ Inserted into $tableName');
 
         // 🎯 4) afterCreate
-        var item = fromJson(ordered);
+        ctx.result ??= ordered;
+        var item = _resolveHookData(ctx, ordered);
         if (afterCreate != null) item = await afterCreate!(item, ctx);
+        ctx.result = item;
 
         // 🎯 5) Response
-        final result = {'message': 'Created', 'data': toJson(item)};
-        ctx['response'] = result;
-        ctx.result ??= result;
-        if (ctx.result is Response) {
-          return ctx.result as Response;
-        }
-
-        return Response.ok(jsonEncode(ctx.result), headers: _jsonHeader);
+        return _buildHookResponse(
+            ctx, {'message': 'Created', 'data': toJson(item)});
       });
 
   // 🚀 UPDATE
@@ -420,44 +471,53 @@ abstract class DartRestService<T> {
         final payload = jsonDecode(await req.readAsString());
         ctx.payload.addAll(Map<String, dynamic>.from(payload));
         await _runHook(beforeUpdate, ctx);
+        if (ctx.result != null) {
+          if (afterUpdate != null) {
+            ctx.result = await afterUpdate!(_resolveHookData(ctx), ctx);
+          }
+
+          return _buildHookResponse(ctx, {'message': 'Updated'});
+        }
+
         if (customService == false) {
           await hiveService.update(
             tableName,
             payload,
             where: {primaryKey: id},
           );
+
+          final updated = await hiveService.findOne(
+            tableName,
+            where: {primaryKey: id},
+          );
+          ctx.result ??= updated ?? payload;
         }
 
-        var item = fromJson(payload);
+        var item = _resolveHookData(ctx, payload);
         if (afterUpdate != null) item = await afterUpdate!(item, ctx);
+        ctx.result = item;
 
-        final result = {'message': 'Updated', 'data': toJson(item)};
-        ctx['response'] = result;
-        ctx.result ??= result;
-        if (ctx.result is Response) {
-          return ctx.result as Response;
-        }
-
-        return Response.ok(jsonEncode(ctx.result), headers: _jsonHeader);
+        return _buildHookResponse(
+            ctx, {'message': 'Updated', 'data': toJson(item)});
       });
 
   // 🚀 DELETE
   Future<Response> delete(Request req, String id) =>
       _executeSafely(req, (ctx) async {
         await _runHook(beforeDelete, ctx);
+        if (ctx.result == null && customService == false) {
+          ctx.result = await hiveService.findOne(
+            tableName,
+            where: {primaryKey: id},
+          );
+        }
+
         if (customService == false) {
           await hiveService.destroy(tableName, where: {primaryKey: id});
         }
         await _runHook(afterDelete, ctx);
 
-        final result = {'message': 'Deleted $id'};
-        ctx['response'] = result;
-        ctx.result ??= result;
-        if (ctx.result is Response) {
-          return ctx.result as Response;
-        }
-
-        return Response.ok(jsonEncode(ctx.result), headers: _jsonHeader);
+        return _buildHookResponse(ctx, {'message': 'Deleted $id'});
       });
 }
 

@@ -1,6 +1,6 @@
 module.exports = {
   apps: [{
-    name: "fawq_dart_backend",
+    name: "server",
     script: "./build/main",
     exec_mode: "fork",
     instances: 1,

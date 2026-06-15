@@ -1,13 +1,43 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:shelf_router/shelf_router.dart';
+
 import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart';
-import 'package:shelf_router/shelf_router.dart';
 import 'dart_rest/migrator/migrator.dart';
 import 'upload_service/upload_service_rest.dart';
 import 'env_loader.dart';
 import 'middleware/middleware.dart';
-import 'ping/ping_rest.dart';
+import 'authservice/authservice_rest.dart';
+import 'middleware/cors.dart';
+import 'swagger/swagger_ui.dart';
+import 'users/users_rest.dart';
+import 'dart_rest/seeder/bootstrap_seeder.dart';
+String formatPortInUseMessage({
+  required String serviceName,
+  required int port,
+}) {
+  return '❌ $serviceName port $port is already in use. '
+      'Stop the existing process or change the configured port.';
+}
+
+Future<HttpServer> startBoundServer({
+  required String serviceName,
+  required int port,
+  required Future<HttpServer> Function() bind,
+}) async {
+  try {
+    return await bind();
+  } on SocketException catch (error) {
+    if (error.osError?.errorCode == 48) {
+      throw StateError(
+        formatPortInUseMessage(serviceName: serviceName, port: port),
+      );
+    }
+
+    rethrow;
+  }
+}
 
 Future<void> main(List<String> args) async {
   // Load environment
@@ -16,6 +46,8 @@ Future<void> main(List<String> args) async {
   // Jalankan migrasi dulu
   await Migrator.init();
 
+  // await BootstrapSeeder.init();
+
   // Setup router utama
   final router = Router();
 
@@ -23,9 +55,12 @@ Future<void> main(List<String> args) async {
 
   final uploadRest = UploadServiceRest();
   router.mount('/upload', uploadRest.router.call);
+
+  final authRest = AuthserviceRest();
+  router.mount('/auth', authRest.router.call);
+  final userRest = UsersRest();
+  router.mount('/users', userRest.router.call);
   // Route default /root
-  final customServiceExample = PingRest();
-  router.mount('/example', customServiceExample.router.call);
 
   router.get('/', (Request req) {
     return Response.ok(
@@ -46,6 +81,7 @@ Future<void> main(List<String> args) async {
       .addMiddleware(
         SqlInjectionGuard().call(),
       )
+      .addMiddleware(corsMiddleware.call())
       .addHandler(router.call);
 
   // Start server
@@ -53,6 +89,34 @@ Future<void> main(List<String> args) async {
   final port = int.tryParse(env['PORT_SERVER'].toString()) ?? 8080;
   // final port = int.tryParse(Platform.environment['PORT'] ?? '') ?? 8080;
 
-  final server = await serve(handler, ip, port);
-  print('🚀 Server listening on http://${server.address.host}:${server.port}');
+  try {
+    final server = await startBoundServer(
+      serviceName: 'API server',
+      port: port,
+      bind: () => serve(handler, ip, port),
+    );
+
+    try {
+      final swaggerServer = await startBoundServer(
+        serviceName: 'Swagger UI',
+        port: swaggerUiPort,
+        bind: () => serveSwaggerUi(address: ip),
+      );
+
+      print(
+        '📘 Swagger UI listening on http://${swaggerServer.address.host}:${swaggerServer.port}',
+      );
+      print(
+          '🚀 Server listening on http://${server.address.host}:${server.port}');
+    } on StateError {
+      await server.close(force: true);
+      rethrow;
+    }
+  } on StateError catch (error) {
+    stderr.writeln(error.message);
+    exitCode = 1;
+    return;
+  } on SocketException {
+    rethrow;
+  }
 }

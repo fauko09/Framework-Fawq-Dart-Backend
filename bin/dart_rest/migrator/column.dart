@@ -27,29 +27,41 @@ class Column {
     bool unique = false,
     bool nullable = true,
     bool primaryKey = false,
+    dynamic defaultValue,
   }) =>
       Column(
         type: 'VARCHAR($length)',
         unique: unique,
         nullable: nullable,
         primaryKey: primaryKey,
+        defaultValue: defaultValue,
       );
 
-  static Column text({bool nullable = true}) =>
-      Column(type: 'TEXT', nullable: nullable);
+  static Column text({bool nullable = true, dynamic defaultValue}) =>
+      Column(type: 'TEXT', nullable: nullable, defaultValue: defaultValue);
 
-  static Column integer({bool nullable = true}) =>
-      Column(type: 'INT', nullable: nullable);
+  static Column integer({bool nullable = true, dynamic defaultValue}) =>
+      Column(type: 'INT', nullable: nullable, defaultValue: defaultValue);
 
-   // ================= DATE / TIME =================
+
+  static Column float({bool nullable = true, dynamic defaultValue}) =>
+      Column(type: 'FLOAT', nullable: nullable, defaultValue: defaultValue);
+
+  static Column double({bool nullable = true, dynamic defaultValue}) =>
+      Column(type: 'DOUBLE', nullable: nullable, defaultValue: defaultValue);
+
+  static Column tinyInt({bool nullable = true, dynamic defaultValue}) =>
+      Column(type: 'TINYINT', nullable: nullable, defaultValue: defaultValue);
+
+  // ================= DATE / TIME =================
 
   /// DATE only (YYYY-MM-DD)
-  static Column date({bool nullable = true}) =>
-      Column(type: 'DATE', nullable: nullable);
+  static Column date({bool nullable = true, dynamic defaultValue}) =>
+      Column(type: 'DATE', nullable: nullable, defaultValue: defaultValue);
 
   /// DATETIME
-  static Column dateTime({bool nullable = true}) =>
-      Column(type: 'DATETIME', nullable: nullable);
+  static Column dateTime({bool nullable = true, dynamic defaultValue}) =>
+      Column(type: 'DATETIME', nullable: nullable, defaultValue: defaultValue);
 
   static Column timestamp({
     bool nullable = false,
@@ -64,11 +76,32 @@ class Column {
   // ================= SPECIAL TYPES =================
 
   /// MySQL JSON
-  static Column json({bool nullable = true}) =>
-      Column(type: 'JSON', nullable: nullable);
+  static Column json({bool nullable = true, dynamic defaultValue}) =>
+      Column(type: 'JSON', nullable: nullable, defaultValue: defaultValue);
 
   /// Binary large object
-  static Column blob({bool nullable = true}) =>
-      Column(type: 'BLOB', nullable: nullable);
+  static Column blob({bool nullable = true, dynamic defaultValue}) =>
+      Column(type: 'BLOB', nullable: nullable, defaultValue: defaultValue);
 
+  static String? formatDefaultValue(dynamic value) {
+    if (value == null) {
+      return null;
+    }
+
+    if (value is String) {
+      final normalized = value.trim().toUpperCase();
+      if (normalized == 'NULL' || normalized == 'CURRENT_TIMESTAMP') {
+        return normalized;
+      }
+
+      final escaped = value.replaceAll("'", r"\'");
+      return "'$escaped'";
+    }
+
+    if (value is bool) {
+      return value ? '1' : '0';
+    }
+
+    return '$value';
+  }
 }

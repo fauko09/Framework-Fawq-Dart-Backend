@@ -1,319 +1,251 @@
-# DART FRAMEWORK OR TAMPLATE BACKEND ORM MYSQL 
-# CREATED BY FAUKO MISSALAM
-# Dart REST + Migrator (MySQL) CLI Generator
+# Dart REST Framework
 
-# Compile EXE 
-dart compile exe -o build/main bin/server.dart
-./build/main.exe
+Framework backend Dart untuk MySQL, REST, migrasi, seeder, dan Swagger UI.
 
+## Run
 
-# .env:
+```bash
+dart pub get
+dart run bin/server.dart
+```
+
+Default port:
+- API: `PORT_SERVER` dari `.env`
+- Swagger UI: `2001`
+
+## Env
+
+```env
 DB_HOST=localhost
 DB_PORT=3360
 DB_USER=root
 DB_PASSWORD=root
-DB_NAME=
+DB_NAME=hris_fga
 DB_SYNC_FORCE=false
 DB_SYNC_ALTER=true
 PORT_SERVER=8302
+```
 
+## Alur Framework
 
-Repository ini berisi skrip CLI (Dart) untuk:
-1) Generate **Model Migrator** (schema table MySQL) + auto-register ke `model_registry.dart`
-2) Generate **Service REST** (custom/service model) dengan hook `before/after` untuk CRUD
-3) Contoh **MySQL Init Service** (wrapper CRUD) dengan format `where` mirip Sequelize (ringkas, bisa `$gt/$lt/$like/$in`)
+Folder `bin/` adalah entrypoint framework.
 
----
+- `bin/gen_model.dart` membuat model migrator di `bin/dart_rest/models/` dan update `bin/dart_rest/model_registry.dart`
+- `bin/gen_rest.dart` membuat service REST di `bin/<service>/<service>_rest.dart`
+- `bin/server.dart` adalah composition root yang mount service, migrator, seeder, middleware, dan Swagger UI
 
-## 1) Struktur Folder (yang diasumsikan oleh generator)
+## Generate Model
 
-Pastikan struktur ini ada (atau akan dibuat otomatis oleh generator):
+```bash
+dart run bin/gen_model.dart users
+```
 
-bin/
-dart_rest/
-models/
-<table>.dart
-model_registry.dart
-migrator/
-model.dart
-column.dart
-relation.dart
-dart_rest_service.dart
+Hasil:
 
-<service_name>/
-<service_name>_rest.dart
+- `bin/dart_rest/models/users.dart`
+- `bin/dart_rest/model_registry.dart` ter-update otomatis
 
+## Generate REST
 
-Catatan:
-- Generator model menulis file ke: `bin/dart_rest/models/<name>.dart`
-- Registry model akan di-update di: `bin/dart_rest/model_registry.dart`
-- Generator service menulis file ke: `bin/<name>/<name>_rest.dart`
+```bash
+dart run bin/gen_rest.dart ping --no-db
+```
 
----
+Hasil:
 
-## 2) Prasyarat
+- `bin/ping/ping_rest.dart`
 
-- Dart SDK terpasang
-- Pastikan dependency untuk MySQL dan synchronized ada pada `pubspec.yaml` (jika Anda menjalankan `MySqlInitService`):
+Untuk service yang pakai DB, jalankan tanpa `--no-db`.
 
-Contoh minimal:
-```yaml
-dependencies:
-  synchronized: any
-  # mysql package sesuai implementasi Anda (mysql.dart / connector Anda)
+## Before / After
 
-3) CLI: Generate Model Migrator + Register Otomatis
-Tujuan
+Sebelum menambah resource baru:
 
-Membuat file model migrator untuk table MySQL (schema sederhana) dan menambahkan class model tersebut ke registry registeredModels.
+1. Generate model dengan `bin/gen_model.dart`
+2. Generate service dengan `bin/gen_rest.dart`
+3. Mount service itu di `bin/server.dart`
 
-Script
+Sesudah generate:
 
-Skrip generator model (yang Anda berikan) akan:
+- Model migrator masuk ke registry otomatis
+- Service REST bisa langsung dipakai sebagai route di `bin/server.dart`
 
-Membuat file: bin/dart_rest/models/<name>.dart (jika belum ada)
+## MySQL Init Service
 
-Parse isi model_registry.dart untuk ambil model lama (pattern: ClassName(),)
+`bin/dart_rest/mysql/mysql_service.dart` dipakai untuk operasi CRUD dasar dan filter `where` sederhana seperti:
 
-Menambahkan model baru lalu menulis ulang registry dengan daftar import & registeredModels
-
-Cara pakai
-
-Misal ingin membuat model untuk table users:
-
-dart run <nama_file_generator_model>.dart users
-
-Output:
-
-bin/dart_rest/models/users.dart
-
-bin/dart_rest/model_registry.dart ter-update dan berisi Users() di registeredModels
-
-Naming rules
-
-Argumen CLI dianggap sebagai nama table: contoh quota_detail
-
-Class model akan jadi PascalCase:
-
-users -> Users
-
-quota_detail -> QuotaDetail
-
-Contoh hasil file model
-
-Untuk table users:
-
-class Users extends Model {
-  @override
-  String get table => 'users';
-
-  @override
-  Map<String, Column> get schema => {
-    'users_id': Column.string(length: 50, primaryKey: true),
-  };
-}
-
-
-Catatan penting:
-
-Default schema hanya membuat <table>_id sebagai primary key string(50).
-
-Anda biasanya perlu menambah kolom lain secara manual di file model (atau Anda bisa extend generator untuk membaca metadata).
-
-4) CLI: Generate Service REST (Custom / Service Model)
-Tujuan
-
-Membuat service class XxxRest yang extend DartRestService<Map<String,dynamic>> dengan hook lengkap:
-
-Get All: beforeGetAll, afterGetAll
-
-Get One: beforeGetOne, afterGetOne
-
-Create: beforeCreate, afterCreate
-
-Update: beforeUpdate, afterUpdate
-
-Delete: beforeDelete, afterDelete
-
-Cara pakai
-
-Misal ingin membuat service event:
-
-dart run <nama_file_generator_service>.dart event
-
-dart run bin/gen_rest.dart ping --no-db ( custom service no db )
-
-Output:
-
-bin/event/event_rest.dart
-
-Naming rules
-
-Argumen CLI: event
-
-Class: EventRest
-
-Resource route: 'event'
-
-Primary key: 'event_id'
-
-Pagination: enablePagination = true
-
-5) Registry Model (model_registry.dart)
-
-File registry bersifat AUTO GENERATED – DO NOT EDIT.
-
-Bentuk output:
-
-import 'migrator/model.dart';
-import '../dart_rest/models/users.dart';
-import '../dart_rest/models/quota_detail.dart';
-
-// AUTO GENERATED – DO NOT EDIT
-final List<Model> registeredModels = [
-  Users(),
-  QuotaDetail(),
-];
-
-
-Catatan:
-
-Generator melakukan parsing dengan regex (\w+)\(\),
-
-Artinya, registry mengandalkan format penulisan ClassName(), di list agar bisa terbaca.
-
-6) MySqlInitService (CRUD + Where Operator Mirip Sequelize)
-
-Class MySqlInitService adalah wrapper untuk operasi:
-
-findAll(table, where, limit, offset)
-
-findOne(table, where)
-
-create(table, data)
-
-update(table, data, where)
-
-destroy(table, where)
-
-count(table, where)
-
-Thread safety
-
-Semua operasi dibungkus Lock() dari package synchronized:
-
-Mencegah race condition ketika ada banyak request bersamaan.
-
-Cocok untuk skenario server sederhana yang shared connection state.
-
-Format where (ringkas)
-
-Anda bisa menulis where seperti ini:
-
-Sama dengan (=)
-where: {"status": "active"}
-
-Operator:
-where: {
+```dart
+{
+  "status": "active",
   "price": {r"$gt": 100},
-  "qty": {r"$lt": 50},
   "name": {r"$like": "john"},
-  "id": {r"$in": ["A1", "A2", "A3"]},
-  "role": {r"$ne": "admin"},
 }
+```
 
+Sekarang service ini juga mendukung query ORM-style join untuk kebutuhan `GET` / `SELECT`.
 
-Mapping operator -> format internal connector:
+### ORM Join
 
-$gt -> ['>', val]
+Join tersedia lewat:
 
-$lt -> ['<', val]
+- `join(...)`
+- `innerJoin(...)`
+- `leftJoin(...)`
+- `rightJoin(...)`
+- `fullOuterJoin(...)`
 
-$eq -> val
+Struktur relasi join:
 
-$ne -> ['!=', val]
+```dart
+{
+  'table': 'roles',
+  'sourceTable': 'user_roles',
+  'sourceKey': 'role_id',
+  'targetKey': 'role_id',
+  'type': 'INNER',
+}
+```
 
-$like-> ['like', '%val%']
+Keterangan:
 
-$in -> ['in', val]
+- `table`: tabel yang akan di-join
+- `sourceTable`: tabel sumber relasi
+- `sourceKey`: kolom pada `sourceTable`
+- `targetKey`: kolom pada tabel join
+- `type`: optional, bisa `INNER`, `LEFT`, `RIGHT`, `FULL`
+
+Contoh `INNER JOIN` sederhana:
+
+```dart
+final rows = await model.innerJoin(
+  'user_roles',
+  joins: [
+    {
+      'table': 'roles',
+      'sourceTable': 'user_roles',
+      'sourceKey': 'role_id',
+      'targetKey': 'role_id',
+    },
+    {
+      'table': 'role_permissions',
+      'sourceTable': 'roles',
+      'sourceKey': 'role_id',
+      'targetKey': 'role_id',
+    },
+    {
+      'table': 'permissions',
+      'sourceTable': 'role_permissions',
+      'sourceKey': 'permission_id ',
+      'targetKey': 'permission_id ',
+    }
+  ],
+  fields: [
+    'user_roles.user_id',
+    'roles.name AS role_name',
+  ],
+  where: {
+    'user_roles.user_id': userId,
+  },
+);
+```
+
+Contoh multi join berantai dan bercabang:
+
+```dart
+final rows = await model.join(
+  'users',
+  joins: [
+    {
+      'table': 'table1',
+      'sourceTable': 'users',
+      'sourceKey': 'table1_id',
+      'targetKey': 'id',
+      'type': 'INNER',
+    },
+    {
+      'table': 'table2',
+      'sourceTable': 'table1',
+      'sourceKey': 'table2_id',
+      'targetKey': 'id',
+      'type': 'LEFT',
+    },
+    {
+      'table': 'table3',
+      'sourceTable': 'table1',
+      'sourceKey': 'table3_id',
+      'targetKey': 'id',
+      'type': 'LEFT',
+    },
+  ],
+  fields: [
+    'users.user_id',
+    'table1.name AS table1_name',
+    'table2.name AS table2_name',
+    'table3.name AS table3_name',
+  ],
+  where: {
+    'users.user_id': userId,
+  },
+  orderBy: 'users.user_id DESC',
+  limit: 10,
+  offset: 0,
+);
+```
+
+Contoh `FULL OUTER JOIN`:
+
+```dart
+final rows = await model.fullOuterJoin(
+  'user_roles',
+  joins: [
+    {
+      'table': 'roles',
+      'sourceTable': 'user_roles',
+      'sourceKey': 'role_id',
+      'targetKey': 'role_id',
+    },
+  ],
+  fields: [
+    'user_roles.user_id',
+    'roles.name AS role_name',
+  ],
+);
+```
 
 Catatan:
 
-'$like' otomatis dibungkus wildcard %...%
+- `fields` dipakai sebagai fragmen SQL mentah untuk bagian `SELECT`
+- `where` mendukung operator yang sama seperti CRUD biasa: `r"$gt"`, `r"$lt"`, `r"$eq"`, `r"$ne"`, `r"$like"`, `r"$in"`
+- `FULL OUTER JOIN` di MySQL diemulasikan dengan `LEFT JOIN UNION RIGHT JOIN`
+- Implementasi `FULL OUTER JOIN` saat ini dibatasi untuk satu relasi join
+- Fitur join ini ditujukan untuk operasi baca data, bukan `create/update/delete`
 
-Pastikan connector conn.getAll/getOne/update/delete mendukung format where tersebut.
+## Seeder
 
-7) Quick Start (Contoh Alur)
-A. Generate model table
-dart run <gen_model>.dart users
-dart run <gen_model>.dart quota_detail
+Bootstrap seed ada di:
 
-B. Jalankan migrator (contoh konsep)
+- `bin/dart_rest/seeder/bootstrap_seed_catalog.dart`
+- `bin/dart_rest/seeder/bootstrap_seeder.dart`
 
-Tergantung implementasi migrator Anda, umumnya:
+Seed default mencakup:
 
-Import registeredModels
+- `super_admin`
+- `admin_hris`
+- `hrd`
+- `legal`
+- `direktur`
+- `upliner_langsung`
+- `employee`
 
-Loop setiap Model untuk sync schema ke MySQL
+## Swagger UI
 
-Pseudo:
+Swagger UI dijalankan di port `2001` dari file:
 
-for (final m in registeredModels) {
-  await migrator.sync(m);
-}
+- `swagger-ui/swagger.json`
 
-C. Generate service REST
-dart run <gen_service>.dart users
-dart run <gen_service>.dart quota_detail
+## Build EXE
 
-
-Lalu isi hook sesuai kebutuhan (validasi, transformasi data, auth, dll).
-
-8) Praktik Baik
-
-Pisahkan migrator/ (schema) dan service/ (logic API) agar perubahan schema tidak mengganggu business rules.
-
-Jangan mengedit model_registry.dart manual—biarkan generator mengelola.
-
-Jika butuh composite primary key / relasi:
-
-Extend Model.schema
-
-Tambahkan relation.dart sesuai mekanisme migrator Anda
-
-9) Troubleshooting
-Model tidak masuk registry
-
-Penyebab umum:
-
-Format list di registry tidak sesuai ClassName(),
-
-File registry rusak/berbeda format sehingga regex tidak match
-
-Solusi:
-
-Pastikan list registeredModels memakai format:
-
-final List<Model> registeredModels = [
-  Users(),
-];
-
-Service file sudah ada
-
-Generator akan stop jika file sudah ada:
-
-Hapus file lama jika memang ingin regenerate
-
-Atau buat nama service yang berbeda
-
-10) Roadmap (Opsional)
-
-Jika Anda ingin generator lebih “Sequelize-like”, beberapa fitur yang bisa ditambahkan:
-
-Generate schema kolom dari metadata database (DESCRIBE TABLE)
-
-Support relasi otomatis hasMany/belongsTo
-
-Generate migration diff (alter) vs force-create
-
-Generate DTO/Model strongly typed (bukan Map)
+```bash
+dart compile exe -o build/main bin/server.dart
+./build/main
+```

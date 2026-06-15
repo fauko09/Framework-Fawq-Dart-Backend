@@ -17,7 +17,7 @@ void main(List<String> args) {
     dir.createSync(recursive: true);
   }
 
-  final file = File('${dir.path}/$fileName');
+  final file = File('${dir.path}$fileName');
 
   if (file.existsSync()) {
     print('⚠️ File sudah ada: ${file.path}');

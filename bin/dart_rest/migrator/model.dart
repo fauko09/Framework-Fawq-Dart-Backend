@@ -1,6 +1,7 @@
 import '../mysql/mysql.dart';
 import 'column.dart';
 import 'relation.dart';
+
 abstract class Model {
   String get table;
   Map<String, Column> get schema;
@@ -16,8 +17,9 @@ abstract class Model {
       if (!col.nullable) buffer.write(' NOT NULL');
       if (col.autoIncrement) buffer.write(' AUTO_INCREMENT');
       if (col.unique) buffer.write(' UNIQUE');
-      if (col.defaultValue != null) {
-        buffer.write(' DEFAULT ${col.defaultValue}');
+      final formattedDefaultValue = Column.formatDefaultValue(col.defaultValue);
+      if (formattedDefaultValue != null) {
+        buffer.write(' DEFAULT $formattedDefaultValue');
       }
       columnsSql.add(buffer.toString());
     });

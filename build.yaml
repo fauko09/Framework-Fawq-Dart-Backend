@@ -1,0 +1,14 @@
+targets:
+  $default:
+    sources:
+      - $package$
+      - lib/**
+      - specs/**
+    builders:
+      swagger_dart_code_generator:
+        options:
+          input_folder: "specs"
+          output_folder: "lib/generated/swagger"
+          with_base_url: true
+          build_only_models: false
+          use_path_for_request_names: true

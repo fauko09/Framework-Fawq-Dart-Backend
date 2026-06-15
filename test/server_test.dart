@@ -1,39 +1,30 @@
-import 'dart:io';
+import 'dart:convert';
 
-import 'package:http/http.dart';
+import 'package:shelf/shelf.dart';
 import 'package:test/test.dart';
 
+import '../bin/foundation/foundation_rest.dart';
+
+Future<Response> _request(Handler handler, String method, String path) async {
+  return await Future<Response>.value(
+    handler(Request(method, Uri.parse('http://localhost$path'))),
+  );
+}
+
 void main() {
-  final port = '8080';
-  final host = 'http://0.0.0.0:$port';
-  late Process p;
+  test('root endpoint returns migrated HRIS payload', () async {
+    final response = await _request(FoundationRest().handler, 'GET', '/');
 
-  setUp(() async {
-    p = await Process.start(
-      'dart',
-      ['run', 'bin/server.dart'],
-      environment: {'PORT': port},
-    );
-    // Wait for server to start and print to stdout.
-    await p.stdout.first;
-  });
-
-  tearDown(() => p.kill());
-
-  test('Root', () async {
-    final response = await get(Uri.parse('$host/'));
     expect(response.statusCode, 200);
-    expect(response.body, 'Hello, World!\n');
+    final payload =
+        jsonDecode(await response.readAsString()) as Map<String, dynamic>;
+    expect(payload['message'], 'HRIS FGA backend is running');
+    expect(payload['module'], 'foundation');
   });
 
-  test('Echo', () async {
-    final response = await get(Uri.parse('$host/echo/hello'));
-    expect(response.statusCode, 200);
-    expect(response.body, 'hello\n');
-  });
+  test('unknown endpoint still returns 404', () async {
+    final response = await _request(FoundationRest().handler, 'GET', '/foobar');
 
-  test('404', () async {
-    final response = await get(Uri.parse('$host/foobar'));
     expect(response.statusCode, 404);
   });
 }

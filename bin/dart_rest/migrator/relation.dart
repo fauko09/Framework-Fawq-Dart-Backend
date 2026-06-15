@@ -1,4 +1,4 @@
-enum RelationType { belongsTo, hasMany }
+enum RelationType { belongsTo, hasOne, hasMany }
 
 class Relation {
   final RelationType type;
@@ -33,6 +33,19 @@ class Relation {
   }) {
     return Relation(
       type: RelationType.hasMany,
+      model: model,
+      foreignKey: foreignKey,
+      as: as,
+    );
+  }
+
+  static Relation hasOne({
+    required String model,
+    required String foreignKey,
+    required String as,
+  }) {
+    return Relation(
+      type: RelationType.hasOne,
       model: model,
       foreignKey: foreignKey,
       as: as,
