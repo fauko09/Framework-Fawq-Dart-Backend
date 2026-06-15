@@ -10,13 +10,13 @@ class UsersDetail extends Model {
   Map<String, Column> get schema => {
         'users_detail_id': Column.string(length: 50, primaryKey: true),
         'user_id': Column.string(length: 50, nullable: false, unique: true),
-        'address': Column.string(length: 255, nullable: false),
-        'phone': Column.string(length: 20, nullable: false),
+        'address': Column.string(length: 255, nullable: true),
+        'phone': Column.string(length: 20, nullable: true),
         'phone2': Column.string(length: 20, nullable: true),
         'nik': Column.string(length: 50, nullable: false),
         'nik_ktp': Column.string(length: 50, nullable: false),
-        'no_bank': Column.string(length: 50, nullable: false),
-        'nama_bank': Column.string(length: 100,defaultValue: 'bca'),
+        'no_bank': Column.string(length: 50, nullable: true),
+        'nama_bank': Column.string(length: 100,defaultValue: 'BCA'),
         'created_at': Column.dateTime(nullable: false),
       };
 

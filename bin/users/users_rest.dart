@@ -6,6 +6,7 @@ import '../dart_rest/dart_rest_service.dart';
 import '../dart_rest/mysql/mysql_service.dart';
 import '../verify_premission.dart';
 import '../auth_guard.dart';
+import '../gen_nik.dart';
 
 class UsersRest extends DartRestService<Map<String, dynamic>> {
   var model = MySqlInitService();
@@ -123,31 +124,89 @@ class UsersRest extends DartRestService<Map<String, dynamic>> {
 
     // post
     beforeCreate = (ctx) async {
-      final user = await AuthGuard().authorizedUser(ctx.req);
-      if (user == null) {
-        throw AuthException('Unauthorized');
+      try {
+        final user = await AuthGuard().authorizedUser(ctx.req);
+        if (user == null) {
+          throw AuthException('Unauthorized');
+        }
+        var permissions =
+            await VerifyPremission().verifyPremission(user['user_id']);
+        print('permissions: ${jsonEncodeSafe(permissions)}');
+        if (permissions.isEmpty) {
+          throw AuthException('Un Premission null');
+        }
+        final hasPermission =
+            permissions.any((perm) => perm['code'] == 'manage_users');
+        if (!hasPermission) {
+          throw AuthException('Forbidden');
+        }
+        ctx.payload['user_id'] = generateUid();
+        ctx.payload['is_active'] = 'true';
+        ctx.payload['created_at'] = DateTime.now();
+        ctx.payload['password'] =
+            AuthGuard().encryptPassword(ctx.payload['password']);
+        // ctx.result['type'] = ctx.payload['type'];
+        // ctx.result['nik_ktp'] = ctx.payload['nik_ktp'];
+        ctx['rawPayload'] = Map<String, dynamic>.from(ctx.payload);
+
+        ctx.payload.remove('type');
+        ctx.payload.remove('nik_ktp');
+      } catch (e) {
+        ctx.result = {
+          'message': 'Error creating user: ${e.toString()}',
+        };
       }
-      var permissions =
-          await VerifyPremission().verifyPremission(user['user_id']);
-      print('permissions: ${jsonEncodeSafe(permissions)}');
-      if (permissions.isEmpty) {
-        throw AuthException('Un Premission null');
-      }
-      final hasPermission =
-          permissions.any((perm) => perm['code'] == 'manage_users');
-      if (!hasPermission) {
-        throw AuthException('Forbidden');
-      }
-     ctx.payload['user_id'] = generateUid();
-     ctx.payload['is_active'] = 'true';
-     ctx.payload['created_at'] = DateTime.now();
-      ctx.payload['password'] = AuthGuard().encryptPassword(ctx.payload['password']);
     };
     afterCreate = (data, ctx) async {
-      return {
-        'message': 'User created successfully',
-        'data': data,
-      };
+      if (ctx.result['message'] != null) {
+        return ctx.result;
+      }
+      try {
+        print('afterCreate payload: ${jsonEncodeSafe(ctx['rawPayload'])}');
+        late String nik;
+        switch (ctx['rawPayload']['type']) {
+          case 'pkwtt':
+            nik = generateEmployeeUid(EmployeeType.pkwtt);
+            break;
+          case 'pkwt':
+            nik = generateEmployeeUid(EmployeeType.pkwt);
+            break;
+          case 'magang':
+            nik = generateEmployeeUid(EmployeeType.magang);
+            break;
+          default:
+            nik = generateEmployeeUid(EmployeeType.pkwt);
+        }
+        await model.create(
+          'users_detail',
+          {
+            'users_detail_id': const Uuid().v4(),
+            'nik': nik,
+            'nik_ktp': ctx['rawPayload']['nik_ktp'],
+            'user_id': ctx['rawPayload']['user_id'],
+            'created_at': DateTime.now(),
+          },
+        );
+        await model.create(
+          'employees',
+          {
+            'employee_id': const Uuid().v4(),
+            'full_name': ctx.result['name'],
+            'user_id': ctx.result['user_id'],
+            'contract_type': ctx['rawPayload']['type'],
+            'employee_status': 'aktif',
+          },
+        );
+
+        return {
+          'message': 'User created successfully',
+          'data': data,
+        };
+      } catch (e) {
+        return {
+          'message': 'Error after creating user: ${e.toString()}',
+        };
+      }
     };
 
     // patch/id or put/id
