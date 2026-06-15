@@ -125,8 +125,8 @@ class AuthserviceRest extends DartRestService<Map<String, dynamic>> {
       );
       var getSession = await model.findOne('session', where: {
         'user_id': userId,
-      }).then((data) {
-        model.update(
+      }).then((data) async {
+        await model.update(
           'session',
           {
             'access_token_jti': _signToken(
@@ -143,9 +143,12 @@ class AuthserviceRest extends DartRestService<Map<String, dynamic>> {
             ),
             'expires_at': refreshSession.expiresAt,
           },
-          where: {'user_id': data?['user_id']},
+          where: {'user_id': userId},
         );
-
+        var getSessionB = await model.findOne('session', where: {
+          'user_id': userId,
+        });
+        data = getSessionB;
         return data;
       });
 
