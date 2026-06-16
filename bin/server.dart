@@ -14,6 +14,7 @@ import 'swagger/swagger_ui.dart';
 import 'users/users_rest.dart';
 import 'roles/roles_rest.dart';
 import 'dart_rest/seeder/bootstrap_seeder.dart';
+import 'premission/premission_rest.dart';
 String formatPortInUseMessage({
   required String serviceName,
   required int port,
@@ -62,6 +63,8 @@ Future<void> main(List<String> args) async {
   router.mount('/users', userRest.router.call);
   final rolesRest = RolesRest();
   router.mount('/roles', rolesRest.router.call);
+  final premissionRest = PremissionRest();
+  router.mount('/premission', premissionRest.router.call);
   // Route default /root
 
   router.get('/', (Request req) {
