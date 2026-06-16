@@ -15,6 +15,7 @@ import 'users/users_rest.dart';
 import 'roles/roles_rest.dart';
 import 'dart_rest/seeder/bootstrap_seeder.dart';
 import 'premission/premission_rest.dart';
+import 'mappremission/mappremission_rest.dart';
 String formatPortInUseMessage({
   required String serviceName,
   required int port,
@@ -65,6 +66,8 @@ Future<void> main(List<String> args) async {
   router.mount('/roles', rolesRest.router.call);
   final premissionRest = PremissionRest();
   router.mount('/premission', premissionRest.router.call);
+  final mappremissionRest = MappremissionRest();
+  router.mount('/map-premission', mappremissionRest.router.call);
   // Route default /root
 
   router.get('/', (Request req) {
