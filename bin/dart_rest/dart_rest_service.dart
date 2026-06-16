@@ -416,14 +416,7 @@ abstract class DartRestService<T> {
   // 🚀 CREATE
   Future<Response> create(Request req) => _executeSafely(req, (ctx) async {
         // 🎯 1) Kalau multipart → JANGAN readAsString()
-        final contentType = req.headers['content-type'] ?? "";
-        final isMultipart = contentType.contains("multipart/form-data");
-
-        if (!isMultipart) {
-          // JSON biasa → tetap gunakan body
-          final payload = jsonDecode(await req.readAsString());
-          ctx.payload.addAll(Map<String, dynamic>.from(payload));
-        }
+        await _populatePayloadFromRequest(ctx);
 
         // 🎯 2) Jalankan beforeCreate (upload file isi ctx.payload di sini)
         await _runHook(beforeCreate, ctx);
@@ -468,8 +461,7 @@ abstract class DartRestService<T> {
   // 🚀 UPDATE
   Future<Response> update(Request req, String id) =>
       _executeSafely(req, (ctx) async {
-        final payload = jsonDecode(await req.readAsString());
-        ctx.payload.addAll(Map<String, dynamic>.from(payload));
+        await _populatePayloadFromRequest(ctx);
         await _runHook(beforeUpdate, ctx);
         if (ctx.result != null) {
           if (afterUpdate != null) {
@@ -482,7 +474,7 @@ abstract class DartRestService<T> {
         if (customService == false) {
           await hiveService.update(
             tableName,
-            payload,
+            ctx.payload,
             where: {primaryKey: id},
           );
 
@@ -490,10 +482,10 @@ abstract class DartRestService<T> {
             tableName,
             where: {primaryKey: id},
           );
-          ctx.result ??= updated ?? payload;
+          ctx.result ??= updated ?? ctx.payload;
         }
 
-        var item = _resolveHookData(ctx, payload);
+        var item = _resolveHookData(ctx, ctx.payload);
         if (afterUpdate != null) item = await afterUpdate!(item, ctx);
         ctx.result = item;
 
@@ -519,6 +511,23 @@ abstract class DartRestService<T> {
 
         return _buildHookResponse(ctx, {'message': 'Deleted $id'});
       });
+}
+
+Future<void> _populatePayloadFromRequest(HookContext ctx) async {
+  final contentType = ctx.req.headers['content-type'] ?? '';
+  final isMultipart = contentType.contains('multipart/form-data');
+
+  if (isMultipart) {
+    return;
+  }
+
+  final rawBody = await ctx.req.readAsString();
+  if (rawBody.trim().isEmpty) {
+    return;
+  }
+
+  final payload = jsonDecode(rawBody);
+  ctx.payload.addAll(Map<String, dynamic>.from(payload));
 }
 
 Map<String, dynamic> reorderPrimaryKeyFirst(

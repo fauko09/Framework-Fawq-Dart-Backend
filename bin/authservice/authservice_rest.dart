@@ -172,7 +172,7 @@ class AuthserviceRest extends DartRestService<Map<String, dynamic>> {
       final data = fromJson(body);
       final email = data['email'] as String?;
       final password = data['password'] as String?;
-
+   
       if (email == null || password == null) {
         throw Exception('Email and password are required');
       }

@@ -8,6 +8,7 @@ class VerifyPremission {
   Future<List<Map<String, dynamic>>> verifyPremission(
     String userId,
   ) async {
+    print('verifyPremission userId: $userId');
 
     var data = await model.innerJoin(
       'user_roles',
@@ -41,7 +42,7 @@ class VerifyPremission {
       },
     );
     if (data.isEmpty) {
-      return  [];
+      return [];
     }
     return data;
   }

@@ -25,6 +25,9 @@ class AuthGuard {
         if (session == null) {
           throw AuthException('Session not found');
         }
+        if (session['expires_at'].isBefore(DateTime.now())) {
+          throw AuthException('Session expired');
+        }
         final userId = session['user_id'];
         final user = model.findOne('users', where: {
           'user_id': userId,

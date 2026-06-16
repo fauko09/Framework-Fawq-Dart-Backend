@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:shelf/shelf.dart';
 import 'package:test/test.dart';
@@ -125,6 +126,86 @@ void main() {
         'user_id': 7,
         'name': 'before-result',
         'phase': 'after-update',
+      });
+    });
+
+    test('update uses mutated ctx.payload after beforeUpdate', () async {
+      final service = _TestHookService();
+
+      service.beforeUpdate = (ctx) async {
+        ctx.payload.remove('address');
+        ctx.payload['name'] = 'mutated-name';
+        ctx.payload['is_active'] = false;
+      };
+
+      service.afterUpdate = (data, ctx) async {
+        expect(ctx.payload, {
+          'name': 'mutated-name',
+          'is_active': false,
+        });
+
+        return data;
+      };
+
+      final response = await service.update(
+        Request(
+          'PATCH',
+          Uri.parse('http://localhost/7'),
+          body: jsonEncode({
+            'name': 'payload-name',
+            'address': 'Depok',
+          }),
+          headers: {'content-type': 'application/json'},
+        ),
+        '7',
+      );
+
+      expect(response.statusCode, 200);
+      expect(await _readJson(response), {
+        'name': 'mutated-name',
+        'is_active': false,
+      });
+    });
+
+    test('update supports multipart payloads through ctx.payload', () async {
+      final service = _TestHookService();
+
+      service.beforeUpdate = (ctx) async {
+        ctx.payload['attachment'] = 'stored-file.png';
+        ctx.payload['description'] = 'multipart-update';
+      };
+
+      service.afterUpdate = (data, ctx) async {
+        expect(ctx.payload['attachment'], 'stored-file.png');
+        expect(ctx.payload['description'], 'multipart-update');
+        return data;
+      };
+
+      const boundary = 'test-boundary';
+      final multipartBody = [
+        '--$boundary\r\n'
+            'Content-Disposition: form-data; name="attachment"; filename="avatar.png"\r\n'
+            'Content-Type: image/png\r\n\r\n'
+            'fake-png\r\n',
+        '--$boundary--\r\n',
+      ].join();
+
+      final response = await service.update(
+        Request(
+          'PATCH',
+          Uri.parse('http://localhost/7'),
+          body: Uint8List.fromList(utf8.encode(multipartBody)),
+          headers: {
+            'content-type': 'multipart/form-data; boundary=$boundary',
+          },
+        ),
+        '7',
+      );
+
+      expect(response.statusCode, 200);
+      expect(await _readJson(response), {
+        'attachment': 'stored-file.png',
+        'description': 'multipart-update',
       });
     });
 

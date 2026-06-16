@@ -8,6 +8,73 @@ import '../verify_premission.dart';
 import '../auth_guard.dart';
 import '../gen_nik.dart';
 
+String? resolveDeleteTargetUserId(Request req) {
+  if (req.url.pathSegments.isEmpty) {
+    return null;
+  }
+
+  return req.url.pathSegments.last;
+}
+
+List<Map<String, dynamic>> buildDeleteVerificationChecks(
+  String userId, {
+  String? employeeId,
+}) {
+  final checks = <Map<String, dynamic>>[
+    {
+      'table': 'users',
+      'where': {'user_id': userId},
+    },
+    {
+      'table': 'users_detail',
+      'where': {'user_id': userId},
+    },
+    {
+      'table': 'employees',
+      'where': {'user_id': userId},
+    },
+    {
+      'table': 'user_roles',
+      'where': {'user_id': userId},
+    },
+    {
+      'table': 'sessions',
+      'where': {'user_id': userId},
+    },
+  ];
+
+  if (employeeId != null) {
+    checks.addAll([
+      {
+        'table': 'employee_change_requests',
+        'where': {'employee_id': employeeId},
+      },
+      {
+        'table': 'employee_documents',
+        'where': {'employee_id': employeeId},
+      },
+      {
+        'table': 'contracts',
+        'where': {'employee_id': employeeId},
+      },
+      {
+        'table': 'contract_approval_steps',
+        'where': {'approver_employee_id': employeeId},
+      },
+      {
+        'table': 'contract_signatures',
+        'where': {'employee_id': employeeId},
+      },
+      {
+        'table': 'contract_renewals',
+        'where': {'employee_id': employeeId},
+      },
+    ]);
+  }
+
+  return checks;
+}
+
 class UsersRest extends DartRestService<Map<String, dynamic>> {
   var model = MySqlInitService();
   final _uuid = Uuid();
@@ -220,6 +287,23 @@ class UsersRest extends DartRestService<Map<String, dynamic>> {
         };
         return;
       }
+      if (ctx.req.url.queryParameters['nonaktif'] == 'true') {
+        await Future.wait([
+          model.update('users', {
+            'is_active': ctx.data['is_active'] == 'true' ? 'false' : 'true',
+          }, where: {
+            'user_id': ctx.req.url.pathSegments.last,
+          }),
+          model.update('employees', {
+            'employee_status':
+                ctx.data['is_active'] == 'true' ? 'nonaktif' : 'aktif',
+          }, where: {
+            'user_id': ctx.req.url.pathSegments.last,
+          }),
+        ]);
+
+        return;
+      }
       ctx['data'] = Map<String, dynamic>.from(ctx.payload);
       ctx.payload.remove('address');
       ctx.payload.remove('phone');
@@ -285,62 +369,62 @@ class UsersRest extends DartRestService<Map<String, dynamic>> {
         ],
       );
 
-      // var result = model.leftJoin('users', joins: [
-      //   {
-      //     'table': 'users_detail',
-      //     'sourceTable': 'users',
-      //     'sourceKey': 'user_id',
-      //     'targetKey': 'user_id',
-      //   },
-      //   {
-      //     'table': 'employees',
-      //     'sourceTable': 'users_detail',
-      //     'sourceKey': 'user_id',
-      //     'targetKey': 'user_id',
-      //   },
-      //   {
-      //     'table': 'departments',
-      //     'sourceTable': 'employees',
-      //     'sourceKey': 'department_id',
-      //     'targetKey': 'department_id',
-      //   },
-      //   {
-      //     'table': 'positions',
-      //     'sourceTable': 'employees',
-      //     'sourceKey': 'position_id',
-      //     'targetKey': 'position_id',
-      //   },
-      //   {
-      //     "table": 'user_roles',
-      //     "sourceTable": 'users',
-      //     "sourceKey": 'user_id',
-      //     "targetKey": 'user_id',
-      //   },
-      //   {
-      //     "table": 'roles',
-      //     "sourceTable": 'user_roles',
-      //     "sourceKey": 'role_id',
-      //     "targetKey": 'role_id',
-      //   }
-      // ],
-      //  fields: [
-      //   'users.user_id',
-      //   'users.name',
-      //   'users.is_active',
-      //   'users_detail.address',
-      //   'users_detail.phone AS phone_number',
-      //   'users_detail.nik',
-      //   'users_detail.nik_ktp',
-      //   'users_detail.no_bank',
-      //   'users_detail.nama_bank',
-      //   'employees.contract_type',
-      //   'employees.employee_status',
-      //   'departments.name AS department_name',
-      //   'positions.name AS position_name',
-      //   'roles.name AS role_name',
-      //  ], where: {
-      //   'users.user_id':  userId,
-      // }).then((data) => data.isNotEmpty ? data.first : null);
+      var result = await model.leftJoin('users', joins: [
+        {
+          'table': 'users_detail',
+          'sourceTable': 'users',
+          'sourceKey': 'user_id',
+          'targetKey': 'user_id',
+        },
+        {
+          'table': 'employees',
+          'sourceTable': 'users_detail',
+          'sourceKey': 'user_id',
+          'targetKey': 'user_id',
+        },
+        {
+          'table': 'departments',
+          'sourceTable': 'employees',
+          'sourceKey': 'department_id',
+          'targetKey': 'department_id',
+        },
+        {
+          'table': 'positions',
+          'sourceTable': 'employees',
+          'sourceKey': 'position_id',
+          'targetKey': 'position_id',
+        },
+        {
+          "table": 'user_roles',
+          "sourceTable": 'users',
+          "sourceKey": 'user_id',
+          "targetKey": 'user_id',
+        },
+        {
+          "table": 'roles',
+          "sourceTable": 'user_roles',
+          "sourceKey": 'role_id',
+          "targetKey": 'role_id',
+        }
+      ], fields: [
+        'users.user_id',
+        'users.name',
+        'users.is_active',
+        'users_detail.address',
+        'users_detail.phone AS phone_number',
+        'users_detail.nik',
+        'users_detail.nik_ktp',
+        'users_detail.no_bank',
+        'users_detail.nama_bank',
+        'employees.contract_type',
+        'employees.employee_status',
+        'departments.name AS department_name',
+        'positions.name AS position_name',
+        'roles.name AS role_name',
+      ], where: {
+        'users.user_id': userId,
+      }).then((data) => data.isNotEmpty ? data.first : null);
+      ctx.result = result;
     };
     afterUpdate = (data, ctx) async {
       return {
@@ -366,8 +450,94 @@ class UsersRest extends DartRestService<Map<String, dynamic>> {
       if (!hasPermission) {
         throw AuthException('Forbidden');
       }
+      final targetUserId = resolveDeleteTargetUserId(ctx.req);
+      if (targetUserId == null) {
+        throw ArgumentError('Missing target user_id for delete');
+      }
+
+      ctx['deleteTargetUserId'] = targetUserId;
+
+      final employee = await model.findOne('employees', where: {
+        'user_id': targetUserId,
+      });
+      final employeeId = employee?['employee_id']?.toString();
+      ctx['deleteEmployeeId'] = employeeId;
+
+      if (employeeId != null) {
+        await model.destroy('employee_change_requests', where: {
+          'employee_id': employeeId,
+        });
+        await model.destroy('employee_documents', where: {
+          'employee_id': employeeId,
+        });
+        await model.destroy('contracts', where: {
+          'employee_id': employeeId,
+        });
+        await model.destroy('contract_approval_steps', where: {
+          'approver_employee_id': employeeId,
+        });
+        await model.destroy('contract_signatures', where: {
+          'employee_id': employeeId,
+        });
+        await model.destroy('contract_renewals', where: {
+          'employee_id': employeeId,
+        });
+      }
+
+      await Future.wait([
+        model.destroy('users_detail', where: {
+          'user_id': targetUserId,
+        }),
+        model.destroy('sessions', where: {
+          'user_id': targetUserId,
+        }),
+        model.destroy('user_roles', where: {
+          'user_id': targetUserId,
+        }),
+      ]);
+
+      await model.destroy('employees', where: {
+        'user_id': targetUserId,
+      });
     };
-    afterDelete = (ctx) async {};
+    afterDelete = (ctx) async {
+      final targetUserId = (ctx['deleteTargetUserId'] as String?) ??
+          resolveDeleteTargetUserId(ctx.req);
+      if (targetUserId == null) {
+        ctx.result = {
+          'message': 'Error deleting user: Missing target user_id',
+        };
+        return ctx.result;
+      }
+
+      final employeeId = ctx['deleteEmployeeId'] as String?;
+      final verificationChecks = buildDeleteVerificationChecks(
+        targetUserId,
+        employeeId: employeeId,
+      );
+
+      final remainingRecords = await Future.wait(
+        verificationChecks.map(
+          (check) => model.findOne(
+            check['table'] as String,
+            where: Map<String, dynamic>.from(check['where'] as Map),
+          ),
+        ),
+      );
+
+      final hasRemainingData = remainingRecords.any((record) => record != null);
+      if (hasRemainingData) {
+        ctx.result = {
+          'message': 'Error deleting user: User still has related data',
+        };
+        return ctx.result;
+      }
+      ctx.result = {
+        'message': 'User deleted successfully',
+      };
+
+      return ctx.result;
+    };
   }
 
   @override
