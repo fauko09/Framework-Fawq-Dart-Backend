@@ -12,6 +12,7 @@ import 'authservice/authservice_rest.dart';
 import 'middleware/cors.dart';
 import 'swagger/swagger_ui.dart';
 import 'users/users_rest.dart';
+import 'roles/roles_rest.dart';
 import 'dart_rest/seeder/bootstrap_seeder.dart';
 String formatPortInUseMessage({
   required String serviceName,
@@ -55,11 +56,12 @@ Future<void> main(List<String> args) async {
 
   final uploadRest = UploadServiceRest();
   router.mount('/upload', uploadRest.router.call);
-
   final authRest = AuthserviceRest();
   router.mount('/auth', authRest.router.call);
   final userRest = UsersRest();
   router.mount('/users', userRest.router.call);
+  final rolesRest = RolesRest();
+  router.mount('/roles', rolesRest.router.call);
   // Route default /root
 
   router.get('/', (Request req) {

@@ -4,13 +4,14 @@ import '../dart_rest/dart_rest_service.dart';
 import '../dart_rest/mysql/mysql_service.dart';
 import '../verify_premission.dart';
 import '../auth_guard.dart';
+import 'package:uuid/uuid.dart';
 
 class RolesRest extends DartRestService<Map<String, dynamic>> {
   var model = MySqlInitService();
   RolesRest() : super('roles', customService: false) {
     enablePagination = true;
 
-    primaryKey = 'roles_id';
+    primaryKey = 'role_id';
 
     // get all
     beforeGetAll = (ctx) async {
@@ -69,6 +70,15 @@ class RolesRest extends DartRestService<Map<String, dynamic>> {
       if (!hasPermission) {
         throw AuthException('Forbidden');
       }
+      var isChecked = await model.findOne('roles', where: {
+        'name': ctx.payload['name'],
+      });
+
+      if (isChecked != null) {
+        throw Exception('Role name already exists');
+      }
+      ctx.payload['role_id'] =
+          Uuid().v4(); // Generate new UUID for role_id when fetching by ID
     };
     afterCreate = (data, ctx) async {
       return data;
@@ -113,8 +123,21 @@ class RolesRest extends DartRestService<Map<String, dynamic>> {
       if (!hasPermission) {
         throw AuthException('Forbidden');
       }
+      await Future.wait([
+        model.destroy('role_permissions', where: {
+          'role_id': ctx.req.url.pathSegments.last,
+        }),
+        model.destroy('user_roles', where: {
+          'role_id': ctx.req.url.pathSegments.last,
+        }),
+      ]);
     };
-    afterDelete = (ctx) async {};
+    afterDelete = (ctx) async {
+      ctx.result = {
+        'message': 'Role deleted successfully',
+      };
+      return ctx.result;
+    };
   }
 
   @override

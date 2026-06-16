@@ -11,7 +11,7 @@ class Roles extends Model {
         'role_id': Column.string(length: 50, primaryKey: true, nullable: false),
         'name': Column.string(length: 100, unique: true, nullable: false),
         'description': Column.text(),
-        'level': Column.integer(nullable: false),
+        'level': Column.integer(nullable: false ,),
       };
 
   @override

@@ -488,7 +488,7 @@ class UsersRest extends DartRestService<Map<String, dynamic>> {
         model.destroy('users_detail', where: {
           'user_id': targetUserId,
         }),
-        model.destroy('sessions', where: {
+        model.destroy('session', where: {
           'user_id': targetUserId,
         }),
         model.destroy('user_roles', where: {
